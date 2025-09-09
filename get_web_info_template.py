@@ -1088,7 +1088,8 @@ def use_log_get_web_object():
 
         page.evaluate("""
             document.addEventListener("click", e => {
-                e.preventDefault();
+                e.preventDefault();      // 阻止默认动作（比如跳转）
+                e.stopPropagation();     // 阻止事件冒泡
                 window.sendToPython(e.target.outerHTML);
             }, true);
         """)

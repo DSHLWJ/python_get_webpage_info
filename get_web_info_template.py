@@ -10,9 +10,11 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import cloudscraper
+import easyocr
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from httpx._urlparse import urlparse
+from playwright.sync_api import sync_playwright
 
 # 加载 .env 文件
 load_dotenv(".env")  # 如果文件名是 .env，默认可以省略参数

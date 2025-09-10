@@ -10,43 +10,45 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import cloudscraper
-import easyocr
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from httpx._urlparse import urlparse
-from playwright.sync_api import sync_playwright
 
 # 加载 .env 文件
 load_dotenv(".env")  # 如果文件名是 .env，默认可以省略参数
 
+
 request_base_url = os.getenv("request_base_url")
 save_root = os.getenv("save_root")
 
-
-# 网页请求的语言类型
-GLOBAL_LANGUAGE = "zh-CN"
-
-# 重新更新
+# 重新肯定是更新成功的
 save_update_mark = False
-# 错误重新抓取
-save_retry_mark = False
+
+# 错误抓取肯定是抓取失败的
+save_retry_mark = True
+
+# 最大线程数
+MAX_WORKERS=10
+
+def delay_time():
+    time.sleep(random.uniform(1, 3))
+
 # 开启测试
-test_mark_my = False
+test_mark_my = True
 
 # 测试文件所在位置
-
+test_save_file_path = f"all_movies.json"
 # 测试的分类
-test_keywords_arr = [{"keyword": "name"}]
+test_keywords_arr = [{'keyName': '12345'}]
 # 测试的演员对象
 test_actor_info_object = {
-
-}
+    }
 
 # 创建全局 scraper（保持 Session 复用）
 scraper = cloudscraper.create_scraper()
 # 配置日志
-log_dir = os.getenv("log_dir")
-# 创建日志文件夹
+log_dir=os.getenv("log_dir")
+
 os.makedirs(log_dir, exist_ok=True)
 
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -60,39 +62,25 @@ logging.basicConfig(
     ]
 )
 
-keys = ["英文名称"]
-values = ["中文名称"]
 
-Language = ""
 
-Accept_Language = [
-    {"zh-CN": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6"}
-]
+Referer = ["https://.com/"]
 
-for item in Accept_Language:
-    if GLOBAL_LANGUAGE in item:
-        print(f"存在 {GLOBAL_LANGUAGE}，对应的值是: {item[GLOBAL_LANGUAGE]}")
-        Language = item[GLOBAL_LANGUAGE]
-        break
-else:
-    Language = item["zh-CN"]
-    print(f"设置语言不存在，默认中文")
+values = ["Hello"]
+keys = ['你好']
 
 
 
 
-# 数据映射字典，用于替换英文数据
-if len(keys) != len(values):
-    raise ValueError("keys 和 values 数组长度不一致")
+
 # 生成字典
 video_tap_map = dict(zip(keys, values))
 
 Referer_json_file = "Referer_web.json"
-
 if not os.path.exists(Referer_json_file):
     with open(Referer_json_file, "w", encoding="utf-8") as f:
         json.dump([], f, ensure_ascii=False, indent=4)
-    print(f"创建空文件: {Referer_json_file}")
+    print(f"⚠️ 创建空文件: {Referer_json_file}")
 else:
     # === 保存为 JSON 文件 ===
     with open(Referer_json_file, "r", encoding="utf-8") as f:
@@ -122,6 +110,12 @@ def log_download(msg_info, success_status):
     else:
         msg = f"{msg_info} | 状态: 失败"
         logging.error(msg)
+
+
+if len(keys) != len(values):
+    raise ValueError("keys 和 values 数组长度不一致")
+
+
 
 
 # 解析请求头
@@ -158,9 +152,6 @@ def get_actor_info_form_html(soup):
     return actors_arr
 
 
-# 找div标签，提取里面的
-
-
 def get_actor_movies_info_list_page_form_html(soup):
     movies_info_arr = []
     for item in soup.select("div.movie-list div.item"):
@@ -193,13 +184,11 @@ def get_actor_movies_info_list_page_form_html(soup):
 
 
 def get_actor_movies_magnet_info__form_html(soup):
-    # 视频详情信息
-    video_info = {"Tags": ""}
-
+    video_info = {}
+    video_info["Tags"] = ""
     movies_magnet_arr = []
 
     movies_cls = []
-
     movies_screenshot_url_arr = []
 
     tag = soup.find("div", class_="video-detail", attrs={"data-controller": "movie-detail"})
@@ -238,7 +227,8 @@ def get_actor_movies_magnet_info__form_html(soup):
                 })
 
         nav = soup.find('nav', class_='panel movie-panel-info')
-        video_info = {"Tags": []}
+        video_info = {}
+        video_info["Tags"] = []
         if nav:
             # 遍历每个 panel-block
             for block in nav.find_all('div', class_='panel-block', recursive=False):
@@ -273,6 +263,7 @@ def get_actor_movies_magnet_info__form_html(soup):
                     print("错误" + str(e))
 
         # map映射，英译中
+
         # 将原始字典映射成英文字段
         try:
             if video_info["Tags"] is not None and len(video_info["Tags"]) > 0:
@@ -305,12 +296,15 @@ def get_actor_movies_magnet_info__form_html(soup):
 
 def init_json_load_file(file_path):
     data_arr = []
-    if not os.path.exists(file_path):
-        with open(file_path, "w", encoding="utf-8") as ef:
-            json.dump([], ef, ensure_ascii=False, indent=4)
-    else:
-        with open(file_path, "r+", encoding="utf-8") as ef:
-            data_arr = json.load(ef)
+    try:
+        if not os.path.exists(file_path):
+            with open(file_path, "w", encoding="utf-8") as ef:
+                json.dump([], ef, ensure_ascii=False, indent=4)
+        else:
+            with open(file_path, "r+", encoding="utf-8") as ef:
+                data_arr = json.load(ef)
+    except:
+        log_download(f"打开错误文件是{file_path}",success_status=False)
     return data_arr
 
 
@@ -320,8 +314,7 @@ def update_json_load_file(file_path, update_data):
             json.dump(update_data, ef, ensure_ascii=False, indent=4)
         return True
     except Exception as e:
-        log_download("保存文件出错" + file_path + "||出错数据为:" + str(update_data) + "||出错原因是:" + e,
-                     success_status=False)
+        log_download(f"保存文件出错{file_path} ||出错数据为: {str(update_data)}||出错原因是: {str(e)}", success_status=False)
         return False
 
 
@@ -337,35 +330,32 @@ def fetch_page_with_cookies(url):
     """
     使用 cloudscraper + 浏览器登录后的 Cookie 获取页面内容
     :param url: 目标页面 URL
-    :param cookie_file: 保存 Cookie 的文件路径
     :return: (status_code, html_text)
     """
-    Host = ""
     # 3. 设置请求头
-    headers = {
-        "User-Agent": random.choice(USER_AGENTS),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Connection": "keep-alive",
-        "Referer": random.choice(Referer),
-        "Host": Host,
-        "accept-language": Language
 
-    }
-
+    is_referer = False
     RETRY_COUNT = 0
     while True:
         try:
-            time.sleep(random.uniform(2, 5))
+            headers = {
+                "User-Agent": random.choice(USER_AGENTS),
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Connection": "keep-alive",
+                "Referer":random.choice(Referer) ,
+                "Host": "",
+                "accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6"
+            }
+            delay_time()
             # 4. 发起请求
-            with scraper.get(url, cookies=global_cookies, headers=headers, stream=True, timeout=20) as resp:
+            with scraper.get(url, cookies=global_cookies, headers=headers, stream=True, timeout=25) as resp:
                 if resp.status_code == 200:
                     return resp.status_code, resp.text
                 else:
-                    log_download("请求失败 " + url + str(resp.status_code), success_status=False)
+                    log_download(f"请求失败 {url}  状态码:{str(resp.status_code)}" , success_status=False)
                     return resp.status_code, resp.text
         except Exception as e:
             RETRY_COUNT += 1
-            time.sleep(random.uniform(1, 2))
             if RETRY_COUNT > MAX_RETRIES:
                 log_download("超过最大请求次数五次", success_status=False)
                 # 构造一个假的 resp，带 status_code
@@ -383,7 +373,6 @@ def download_image(request_url, save_path):
     :return: HTTP 状态码
     """
 
-    Host = ""
     # 3. 设置请求头
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
@@ -391,7 +380,7 @@ def download_image(request_url, save_path):
         "Connection": "keep-alive",
         "Referer": random.choice(Referer),
         "Sec-Fetch-Dest": "image",
-        "Host": Host,
+        "Host": "",
         "accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6"
     }
 
@@ -399,8 +388,9 @@ def download_image(request_url, save_path):
 
     while True:
         try:
-            time.sleep(random.uniform(2, 6))
-            with scraper.get(request_url, cookies=global_cookies, headers=headers, stream=True, timeout=15) as resp:
+            delay_time()
+
+            with scraper.get(request_url, cookies=global_cookies, headers=headers, stream=True, timeout=25) as resp:
                 if resp.status_code == 200:
                     os.makedirs(os.path.dirname(save_path), exist_ok=True)
                     with open(save_path, "wb") as f:
@@ -459,12 +449,12 @@ def download_cotter(keyword, file_path_keyword_page_json):
 
                 keyword_page_dict_object["url_keyname"] = request_base_keyword_page_url
 
-                log_download("正在请求= " + request_base_keyword_page_url, success_status=True)
+                log_download(f"正在请求= {request_base_keyword_page_url}", success_status=True)
                 status, html = fetch_page_with_cookies(request_base_keyword_page_url)
                 if status != 200:
                     raise Exception(f"请求失败，状态码: {status}")
                 soup = BeautifulSoup(html, 'html.parser')
-                log_download("请求成功= " + request_base_keyword_page_url, success_status=True)
+                log_download(f"请求成功{request_base_keyword_page_url}" , success_status=True)
                 keyword_actors_dict_arr = get_actor_info_form_html(soup)
 
                 index = next((i for i, obj in enumerate(keyword_page_dict) if
@@ -494,7 +484,7 @@ def download_cotter(keyword, file_path_keyword_page_json):
                     keyword_page_dict.remove(keyword_page_dict[len(keyword_page_dict) - 1])
                     state_step = "step1"
                 else:
-                    log_download(f"当前分类{keyword}不做演员更新", success_status=True)
+                    log_download(f"当前分类{keyword}不做演员更新",success_status=True)
                     break
             elif state_step == "step4":
                 if save_retry_mark:
@@ -510,8 +500,7 @@ def download_cotter(keyword, file_path_keyword_page_json):
                             if keyword_actors_dict_arr:
                                 index = next((i for i, obj in enumerate(keyword_page_dict) if
                                               obj["url_keyname"] == request_base_keyword_page_error_url), None)
-                                keyword_page_dict[index][
-                                    "keyword_actors_dict_arr"] = keyword_actors_dict_arr_error_update
+                                keyword_page_dict[index]["keyword_actors_dict_arr"] = keyword_actors_dict_arr_error_update
                                 keyword_page_dict[index]["url_keyName_request_success"] = True
                         state_step == "step3"
                     except Exception as e:
@@ -520,7 +509,7 @@ def download_cotter(keyword, file_path_keyword_page_json):
                 else:
                     state_step == "step3"
     except Exception as e:
-        log_download("程序错误,请求终止 " + request_base_keyword_page_url + str(e), success_status=False)
+        log_download("程序错误,请求终止 " + request_base_keyword_page_url+str(e), success_status=False)
 
 
 def create_folder(save_folder_path):
@@ -568,14 +557,12 @@ def download_image_actor_picture(actor_info_object, save_actor_folder_root):
         log_download("下载头像成功 " + actor_info_object["name"], success_status=True)
         return actor_info_object
     except Exception as e:
-        log_download(f"下载演员头像失败{actor_info_object["name"]} 失败地址 {download_url} 失败原因 {str(e)}",
-                     success_status=False)
+        log_download(f"下载演员头像失败{actor_info_object["name"]} 失败地址 {download_url} 失败原因 {str(e)}", success_status=False)
         update_json_load_file(save_movies_all_actor_json_file, actor_info_object_movies_arr)
         return actor_info_object
 
 
 def download_movies_info(save_actor_moviese_file_json):
-    time.sleep(random.uniform(1, 3))
     request_base_movies_page_url = ""
 
     try:
@@ -584,9 +571,8 @@ def download_movies_info(save_actor_moviese_file_json):
         actor_name = actor_movies_info[0]["name"]
         actor_all_movies_info_page_index = 0
     except Exception as a:
-
+        log_download(f"文件缺少重新生成all movies文件{save_actor_moviese_file_json}",success_status=False)
         data = init_json_load_file(save_actor_moviese_file_json)
-
         filename = os.path.basename(save_actor_moviese_file_json)  # あかね杏珠_all_movies.json
         # 去掉扩展名
         name_part = os.path.splitext(filename)[0]  # あかね杏珠_all_movies
@@ -605,53 +591,67 @@ def download_movies_info(save_actor_moviese_file_json):
 
     request_movies_page_actor_url = ""
 
+
     while True:
         try:
             while True:
-                if status_step == "step2" or status_step == "step1":
+                if status_step == "step2" or status_step == "step1" :
                     break
                 # 错误页面重新抓取
                 if actor_movies_info[0]["is_request_movies"] == 2:
                     if save_update_mark:
-                        if len(actor_all_movies_info_url_arr) > 0:
-                            log_download(f"不做演员{actor_name}的错误页面重新爬取,抓取下一页看看", success_status=True)
-                            request_base_movies_page_url = \
-                            actor_all_movies_info_url_arr[len(actor_all_movies_info_url_arr) - 1]["page_movies_url"]
-                            status_step = "step1"
+                        if len(actor_all_movies_info_url_arr) >0 :
+                                log_download(f"不做演员{actor_name}的错误页面重新爬取,抓取下一页看看",success_status=True)
+                                request_base_movies_page_url = actor_all_movies_info_url_arr[len(actor_all_movies_info_url_arr) - 1]["page_movies_url"]
+                                status_step = "step1"
                         else:
                             request_base_movies_page_url = actor_movies_info[0]["a_href"]
                             if save_retry_mark:
-                                request_base_movies_page_url = \
-                                actor_all_movies_info_url_arr[len(actor_all_movies_info_url_arr) - 1]["page_movies_url"]
+                                request_base_movies_page_url = actor_all_movies_info_url_arr[len(actor_all_movies_info_url_arr) - 1]["page_movies_url"]
                                 status_step == "step1"
                             else:
-                                log_download(f"已经抓取过演员{actor_name}的主演电影,并且不去更新任何操作",
-                                             success_status=True)
+                                log_download(f"已经抓取过演员{actor_name}的主演电影,并且不去更新任何操作",success_status=True)
                                 status_step == "step2"
-
-                    elif save_retry_mark:
-                        for actor_all_movies_info_url_arr_object in actor_all_movies_info_url_arr:
-                            if actor_all_movies_info_url_arr_object["is_request_page_success"]:
-                                log_download(f"这个页面已经抓取过{actor_movies_info[0]["name"]}的电影信息")
-                                continue
-                            else:
-                                request_movies_page_actor_url = request_base_url + actor_all_movies_info_url_arr_object[
-                                    "page_movies_url"]
-                                log_download(
-                                    f"正在重新抓取{actor_movies_info[0]["name"]}的电影页面 " + request_movies_page_actor_url,
-                                    success_status=True)
-                                status, html = fetch_page_with_cookies(request_movies_page_actor_url)
-                                if status != 200:
-                                    raise Exception(f"请求失败，状态码: {status}")
-                                soup = BeautifulSoup(html, 'html.parser')
-                                from_html_actor_all_movies_info_arr = get_actor_movies_info_list_page_form_html(
-                                    soup)
-                                actor_all_movies_info_url_arr_object[
-                                    "page_movies_arr"] = from_html_actor_all_movies_info_arr
-                                actor_all_movies_info_url_arr_object["is_request_page_success"] = True
-                                actor_movies_info["all_movies_info"] = actor_all_movies_info_url_arr
-                                update_json_load_file(save_actor_moviese_file_json, actor_movies_info)
+                    else:
                         status_step = "step2"
+                else:
+                    if  save_retry_mark :
+                        try:
+                            for actor_all_movies_info_url_arr_object in actor_all_movies_info_url_arr:
+                                if actor_all_movies_info_url_arr_object["is_request_page_success"]:
+                                    log_download(f"这个页面已经抓取过{actor_movies_info[0]["name"]}的电影信息", success_status=True)
+                                    continue
+                                else:
+                                    request_movies_page_actor_url = request_base_url +  actor_all_movies_info_url_arr_object[ "page_movies_url"]
+                                    log_download( f"正在重新抓取{actor_movies_info[0]["name"]}的电影页面 {request_movies_page_actor_url}", success_status=True)
+
+                                    status, html = fetch_page_with_cookies(request_movies_page_actor_url)
+                                    if status != 200:
+                                        raise Exception(f"请求失败，状态码: {status}")
+                                    soup = BeautifulSoup(html, 'html.parser')
+
+                                    from_html_actor_all_movies_info_arr = get_actor_movies_info_list_page_form_html(soup)
+
+                                    old_actor_all_page_movies_arr = actor_all_movies_info_url_arr_object[ "page_movies_arr"]
+                                    for from_html_actor_all_movies_info_arr_object in from_html_actor_all_movies_info_arr:
+
+                                        if not any(item["movies_name"] == from_html_actor_all_movies_info_arr_object[ "movies_name"] for item in old_actor_all_page_movies_arr):
+
+                                            old_actor_all_page_movies_arr.append( from_html_actor_all_movies_info_arr_object)
+                                        else:
+                                            log_download(f"已有这个电影信息{from_html_actor_all_movies_info_arr_object["movies_name"]}",success_status=True)
+
+                                    actor_all_movies_info_url_arr_object["page_movies_arr"] = old_actor_all_page_movies_arr
+
+                                    actor_all_movies_info_url_arr_object["is_request_page_success"] = True
+
+                                    actor_movies_info[0]["all_movies_info"] = actor_all_movies_info_url_arr
+
+                                    update_json_load_file(save_actor_moviese_file_json, actor_movies_info)
+                            status_step = "step2"
+                        except Exception as e:
+                            log_download(f"重新抓取{actor_movies_info[0]["name"]}电影页是{request_movies_page_actor_url}错误原因是{str(e)}",success_status=False)
+                            status_step = "step2"
                     else:
                         status_step = "step2"
 
@@ -663,15 +663,13 @@ def download_movies_info(save_actor_moviese_file_json):
                     request_movies_page_actor_url = request_base_url + request_base_movies_page_url
 
                 request_movies_page_actor_url = request_base_url + request_base_movies_page_url
-                log_download(f"正在抓取演员={actor_name}的电影页面" + request_movies_page_actor_url,
-                             success_status=True)
+                log_download(f"正在抓取演员={actor_name}的电影页面{request_movies_page_actor_url}", success_status=True)
                 movies_info_object = {
                     "page_movies_url": request_base_movies_page_url,
                     "page_movies_arr": page_movies_arr,
                     "is_request_page_success": False
                 }
-                index = next((i for i, obj in enumerate(actor_all_movies_info_url_arr) if
-                              obj["page_movies_url"] == request_base_movies_page_url), None)
+                index = next((i for i, obj in enumerate(actor_all_movies_info_url_arr) if obj["page_movies_url"] == request_base_movies_page_url), None)
 
                 if index is None:
                     actor_all_movies_info_url_arr.append(movies_info_object)
@@ -685,15 +683,15 @@ def download_movies_info(save_actor_moviese_file_json):
                 from_html_actor_all_movies_info_arr = get_actor_movies_info_list_page_form_html(soup)
 
                 if index is None:
-                    actor_all_movies_info_url_arr[actor_all_movies_info_page_index][
-                        "page_movies_arr"] = from_html_actor_all_movies_info_arr
+                    actor_all_movies_info_url_arr[actor_all_movies_info_page_index]["page_movies_arr"] = from_html_actor_all_movies_info_arr
                     actor_all_movies_info_url_arr[actor_all_movies_info_page_index]["is_request_page_success"] = True
                 else:
-                    old_actor_all_page_movies_arr = actor_all_movies_info_url_arr[index]["page_movies_arr"]
+                    old_actor_all_page_movies_arr  = actor_all_movies_info_url_arr[index]["page_movies_arr"]
                     for from_html_actor_all_movies_info_arr_object in from_html_actor_all_movies_info_arr:
-                        if not any(item["movies_name"] == from_html_actor_all_movies_info_arr_object["movies_name"] for
-                                   item in old_actor_all_page_movies_arr):
+                        if not any(item["movies_name"] == from_html_actor_all_movies_info_arr_object["movies_name"] for item in old_actor_all_page_movies_arr):
                             old_actor_all_page_movies_arr.append(from_html_actor_all_movies_info_arr_object)
+                        else:
+                            log_download(f"已有这个电影信息{from_html_actor_all_movies_info_arr_object["movies_name"]}",success_status=True)
 
                     actor_all_movies_info_url_arr[index]["is_request_page_success"] = True
                     actor_all_movies_info_url_arr[index]["page_movies_arr"] = old_actor_all_page_movies_arr
@@ -707,10 +705,9 @@ def download_movies_info(save_actor_moviese_file_json):
                 if new_next_page:
                     request_base_movies_page_url = new_next_page
                     update_json_load_file(save_actor_moviese_file_json, actor_movies_info)
-                    log_download("正在抓取下一页 " + new_next_page, success_status=True)
+                    log_download(f"正在抓取下一页 {new_next_page} ", success_status=True)
                 else:
-                    log_download("爬取所有影片信息结束，下一步开始抓取磁力链信息 " + request_movies_page_actor_url,
-                                 success_status=True)
+                    log_download(f"爬取所有影片信息结束，下一步开始抓取磁力链信息 {request_movies_page_actor_url}", success_status=True)
                     actor_movies_info[0]["all_movies_info"] = actor_all_movies_info_url_arr
                     actor_movies_info[0]["is_request_movies"] = 2
                     update_json_load_file(save_actor_moviese_file_json, actor_movies_info)
@@ -728,10 +725,9 @@ def download_movies_info(save_actor_moviese_file_json):
 
 
 def download_movies_magnet_info(save_actor_moviese_file_json):
-    time.sleep(random.uniform(1, 3))
+
 
     log_download(f"开始抓取电影的磁力链信息，文件是{str(save_actor_moviese_file_json)}", success_status=True)
-
     actot_movies_info = init_json_load_file(save_actor_moviese_file_json)
 
     actor_all_movies_info_url_arr = []
@@ -743,26 +739,39 @@ def download_movies_magnet_info(save_actor_moviese_file_json):
         try:
             for actor_all_movies_info_url_arr_object in actor_all_movies_info_url_arr:
                 page_movies_arr = actor_all_movies_info_url_arr_object["page_movies_arr"]
+                is_exist_magnet_status = "step1"
                 for page_movies_arr_object in page_movies_arr:
                     try:
                         if page_movies_arr_object["movies_is_request"]:
                             if save_update_mark:
-                                log_download(
-                                    "所有影片重新更新磁力链信息，当前影片" + page_movies_arr_object["movies_name"],
-                                    success_status=True)
-                            elif save_retry_mark:
-                                if page_movies_arr_object["is_exist_magnet"]:
-                                    log_download(f"更新不存在{page_movies_arr_object["movies_name"]}影片磁力链的信息",
-                                                 success_status=True)
-                                else:
-                                    log_download(f"已存在{page_movies_arr_object["movies_name"]}影片磁力链的信息",
-                                                 success_status=True)
-                                    continue
+                                log_download(f"所有影片重新更新磁力链信息，当前影片{page_movies_arr_object["movies_name"]}" ,success_status=True)
+                                is_exist_magnet_status = "step2"
                             else:
-                                log_download(
-                                    "当前影片已抓取过，不做任何重新请求" + page_movies_arr_object["movies_name"],
-                                    success_status=True)
+                                log_download("当前影片已抓取过，不做任何重新请求" + page_movies_arr_object["movies_name"], success_status=True)
                                 continue
+                        else:
+                            if save_retry_mark:
+                                while True:
+                                    try:
+                                        if page_movies_arr_object["is_exist_magnet"]:
+                                            log_download( f"已存在{page_movies_arr_object["movies_name"]}影片磁力链的信息", success_status=True)
+                                            is_exist_magnet_status = "step1"
+                                            break
+                                        else:
+                                            log_download(f"更新不存在{page_movies_arr_object["movies_name"]}影片磁力链的信息", success_status=True)
+                                            is_exist_magnet_status = "step2"
+                                            break
+                                    except Exception as e:
+                                        if len(page_movies_arr_object["movies_magnet_arr"]) > 0:
+                                            page_movies_arr_object["is_exist_magnet"] = True
+                                        else:
+                                            page_movies_arr_object["is_exist_magnet"] = False
+                                        log_download(f"旧文件不存在这个is_exist_magnet,重新生成", success_status=False)
+                                        actot_movies_info[0]["all_movies_info"] = actor_all_movies_info_url_arr
+                                        update_json_load_file(save_actor_moviese_file_json, actot_movies_info)
+
+                        if is_exist_magnet_status == "step1":
+                            continue
 
                         request_magneturl_info_url = request_base_url + page_movies_arr_object["movies_href"]
 
@@ -773,10 +782,9 @@ def download_movies_magnet_info(save_actor_moviese_file_json):
                             raise Exception(f"请求失败，状态码: {status}")
                         soup = BeautifulSoup(html, 'html.parser')
 
-                        movies_magnet_arr, movies_screenshot_url_arr, movies_cls = get_actor_movies_magnet_info__form_html(
-                            soup)
+                        movies_magnet_arr, movies_screenshot_url_arr, movies_cls = get_actor_movies_magnet_info__form_html(soup)
 
-                        if len(movies_magnet_arr) <= 0:
+                        if len(movies_magnet_arr) <=0:
                             page_movies_arr_object["is_exist_magnet"] = False
                         else:
                             page_movies_arr_object["is_exist_magnet"] = True
@@ -786,21 +794,19 @@ def download_movies_magnet_info(save_actor_moviese_file_json):
                         page_movies_arr_object["movies_screenshot_url_arr"] = movies_screenshot_url_arr
                         page_movies_arr_object["movies_cls"] = movies_cls
 
-                        log_download(f"电影磁力链接爬取成功网址是 {request_magneturl_info_url}", success_status=True)
+                        log_download(f"电影磁力链接爬取成功网址是 {request_magneturl_info_url}" , success_status=True)
 
                         actot_movies_info[0]["all_movies_info"] = actor_all_movies_info_url_arr
                         update_json_load_file(save_actor_moviese_file_json, actot_movies_info)
 
                     except Exception as e:
-                        log_download(f"电影磁力链接爬取失败,链接是 {request_magneturl_info_url}  失败原因是{str(e)}",
-                                     success_status=False)
+                        log_download(f"电影磁力链接爬取失败,链接是 {request_magneturl_info_url}  失败原因是{str(e)}", success_status=False)
                         continue
                 actor_all_movies_info_url_arr_object["page_movies_arr"] = page_movies_arr
             log_download("电影磁力链抓取结束", success_status=True)
         except Exception as e:
             update_json_load_file(save_actor_moviese_file_json, actot_movies_info)
-            log_download("下载出错  " + str(actor_all_movies_info_url_arr) + "失败原因是 " + str(e),
-                         success_status=False)
+            log_download(f"下载出错 {str(actor_all_movies_info_url_arr)} 失败原因是 {str(e)}",success_status=False)
 
 
 def clean_filename(filename: str) -> str:
@@ -821,8 +827,6 @@ def clean_filename(filename: str) -> str:
 
 def download_movies_magnet_info_picture(save_actor_moviese_file_json):
     actot_movies_info = init_json_load_file(save_actor_moviese_file_json)
-
-    time.sleep(random.uniform(10, 30))
 
     actor_all_movies_info_url_arr = []
     if len(actot_movies_info) > 0:
@@ -886,12 +890,11 @@ def download_actor_picture_threadpool(file_actor_info_json, save_file_json, save
     result_arr = []
 
     if test_mark_my:
-        download_image_actor_picture(test_actor_info_object, save_actor_picture_folder_root)
+        download_image_actor_picture(test_actor_info_object,save_actor_picture_folder_root)
     else:
         # 执行图片下载
-        with ThreadPoolExecutor(max_workers=30) as executor:
-            futures = [executor.submit(download_image_actor_picture, actor_info_object, save_actor_picture_folder_root)
-                       for
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = [executor.submit(download_image_actor_picture, actor_info_object, save_actor_picture_folder_root) for
                        actor_info_object in actor_picture_arr]
             for future in as_completed(futures):
                 result_arr.append(future.result())
@@ -916,8 +919,7 @@ def download_movies_info_threadpool(keyword_name):
     else:
         # 执行电影信息下载
         with ThreadPoolExecutor(max_workers=40) as executor:
-            futures = [executor.submit(download_movies_info, file_path_movies) for file_path_movies in
-                       save_path_movies_arr]
+            futures = [executor.submit(download_movies_info, file_path_movies) for file_path_movies in save_path_movies_arr]
             for future in as_completed(futures):
                 future.result()
 
@@ -940,7 +942,7 @@ def download_movies_magnet_info_threadpool(keyword_name):
         download_movies_magnet_info(test_save_file_path)
     else:
         # 执行电影磁力链接信息下载
-        with ThreadPoolExecutor(max_workers=30) as executor:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = [executor.submit(download_movies_magnet_info, file_path_movies) for file_path_movies in
                        save_path_movies_arr]
             for future in as_completed(futures):
@@ -948,6 +950,7 @@ def download_movies_magnet_info_threadpool(keyword_name):
 
 
 def download_movies_magnet_info_picture_threadpool(keyword_name):
+
     base_folder = os.path.join(save_root, keyword_name)
     keyWordFileName = "all_movies"
     save_path_movies_arr = []
@@ -964,14 +967,14 @@ def download_movies_magnet_info_picture_threadpool(keyword_name):
         download_movies_magnet_info_picture(test_save_file_path)
     else:
         # 执行电影磁力链接和图片下载
-        with ThreadPoolExecutor(max_workers=30) as executor:
-            futures = [executor.submit(download_movies_magnet_info_picture, file_path_movies) for file_path_movies in
-                       save_path_movies_arr]
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = [executor.submit(download_movies_magnet_info_picture, file_path_movies) for file_path_movies in  save_path_movies_arr]
             for future in as_completed(futures):
                 future.result()
 
 
 def get_web_info(keyword):
+
     file_path_keyword_page_path = os.path.join(save_root, keyword["keyName"])
 
     create_folder(file_path_keyword_page_path)
@@ -980,16 +983,15 @@ def get_web_info(keyword):
 
     save_actor_info_file_json = os.path.join(file_path_keyword_page_path, keyword["keyName"] + "_all_actor_info.json")
 
-    download_cotter(keyword["keyName"], file_path_keyword_page_json)
+    # download_cotter(keyword["keyName"], file_path_keyword_page_json)
 
-    download_actor_picture_threadpool(file_path_keyword_page_json, save_actor_info_file_json,
-                                      file_path_keyword_page_path)
+    # download_actor_picture_threadpool(file_path_keyword_page_json, save_actor_info_file_json, file_path_keyword_page_path)
 
-    download_movies_info_threadpool(keyword["keyName"])
+    # download_movies_info_threadpool(keyword["keyName"])
 
     download_movies_magnet_info_threadpool(keyword["keyName"])
 
-    download_movies_magnet_info_picture_threadpool(keyword["keyName"])
+    # download_movies_magnet_info_picture_threadpool(keyword["keyName"])
 
 
 def get_web_info_threadpool(keywords_arr):
@@ -1099,9 +1101,8 @@ def use_log_get_web_object():
 
 if __name__ == "__main__":
 
+    keywords_arr = [{'keyName': '12334'}]
     os.makedirs(save_root, exist_ok=True)
-
-    keywords_arr = [{"keyword": "name"}]
 
     if test_mark_my:
         # 根据分类下载各个演员详情

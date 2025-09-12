@@ -32,27 +32,44 @@ MAX_WORKERS = 10
 
 
 # 全局集合 + 锁
-used_sleep_times = set()
-lock = threading.Lock()
+#used_sleep_times = set()
+#lock = threading.Lock()
 
-# 随机休眠不重复
-def get_unique_sleep(min_sec=10, max_sec=20, precision=200, max_retry=15):
-    retry = 0
-    while True:
-        t = round(random.uniform(min_sec, max_sec), precision)
-        with lock:
-            if t not in used_sleep_times:
-                used_sleep_times.add(t)
-                return t
-        retry += 1
-        if retry >= max_retry:
-            # 超过重试次数，清空集合
-            with lock:
-                used_sleep_times.clear()
-            retry = 0  # 重置重试计数
+#def get_unique_sleep(min_sec=10, max_sec=20, precision=800, max_retry=15):
+#    retry = 0
+#    while True:
+#        t = round(random.uniform(min_sec, max_sec), precision)
+#        with lock:
+#            if t not in used_sleep_times:
+#                used_sleep_times.add(t)
+#                return t
+#        retry += 1
+#        if retry >= max_retry:
+#            # 超过重试次数，清空集合
+#            with lock:
+#                used_sleep_times.clear()
+#            retry = 0  # 重置重试计数
+            
+
+lock = threading.Lock()
+last_sleep_time = None  # 保存上一次的时间
+
+def get_unique_sleep(min_sec=1, max_sec=30, step=2):
+    global last_sleep_time
+    with lock:
+        if last_sleep_time is None:
+            # 第一次调用，从最小值开始
+            last_sleep_time = min_sec
+        else:
+            # 每次 +2 秒
+            last_sleep_time += step
+            # 超过最大值后回到最小值
+            if last_sleep_time > max_sec:
+                last_sleep_time = min_sec
+        return last_sleep_time
 
 def delay_time():
-    time.sleep(get_unique_sleep(10,20))
+    time.sleep(get_unique_sleep(1,30))
 
 
 # 开启测试
